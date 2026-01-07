@@ -1,6 +1,6 @@
-# Ice 开发指南
+# SortBar 开发指南
 
-本文档说明如何使用 Xcode 来运行和调试 Ice 项目。
+本文档说明如何使用 Xcode 来运行和调试 SortBar 项目。
 
 ## 环境要求
 
@@ -12,18 +12,18 @@
 
 ### 第一步：打开项目
 
-双击项目根目录中的 `Ice.xcodeproj` 文件，或在终端运行：
+双击项目根目录中的 `SortBar.xcodeproj` 文件，或在终端运行：
 
 ```bash
-open Ice.xcodeproj
+open SortBar.xcodeproj
 ```
 
 ### 第二步：配置签名
 
 首次打开项目时，需要配置代码签名：
 
-1. 在 Xcode 左侧项目导航器中点击 **Ice** 项目（蓝色图标）
-2. 在中间面板选择 **Ice** target
+1. 在 Xcode 左侧项目导航器中点击 **SortBar** 项目（蓝色图标）
+2. 在中间面板选择 **SortBar** target
 3. 点击 **Signing & Capabilities** 选项卡
 4. 在 **Team** 下拉菜单中选择你的 Apple ID 或开发者团队
 5. 确保 **Automatically manage signing** 已勾选
@@ -34,7 +34,7 @@ open Ice.xcodeproj
 
 在 Xcode 工具栏中间的 Scheme 选择器中：
 
-1. 确保选择的 Scheme 是 **Ice**
+1. 确保选择的 Scheme 是 **SortBar**
 2. 运行目标选择 **My Mac**
 
 ### 第四步：构建并运行
@@ -80,7 +80,7 @@ open Ice.xcodeproj
 
 ### 查看应用日志
 
-Ice 使用 `Logger` 进行日志记录。查看日志的方法：
+SortBar 使用 `Logger` 进行日志记录。查看日志的方法：
 
 **方法一：Xcode Console**
 - 运行应用时，日志会显示在 Xcode 底部的 Console 面板
@@ -88,15 +88,15 @@ Ice 使用 `Logger` 进行日志记录。查看日志的方法：
 **方法二：Console.app**
 1. 打开 /Applications/Utilities/Console.app
 2. 在左侧选择你的 Mac
-3. 在搜索框中输入 "Ice" 过滤日志
+3. 在搜索框中输入 "SortBar" 过滤日志
 
 ## 项目结构
 
 ```
-Ice.xcodeproj          # Xcode 项目文件
-Ice/
+SortBar.xcodeproj          # Xcode 项目文件
+SortBar/
 ├── Main/              # 应用入口和核心状态
-│   ├── IceApp.swift   # @main 入口点
+│   ├── SortBarApp.swift   # @main 入口点
 │   ├── AppState.swift # 全局状态管理
 │   └── AppDelegate.swift
 ├── MenuBar/           # 菜单栏管理核心逻辑
@@ -104,9 +104,9 @@ Ice/
 │   ├── MenuBarSection.swift
 │   └── MenuBarItems/
 ├── UI/                # 用户界面组件
-│   ├── IceBar/        # Ice Bar 浮动面板
+│   ├── SortBarBar/        # SortBar Bar 浮动面板
 │   ├── LayoutBar/     # 拖放布局界面
-│   └── IceUI/         # 可复用 SwiftUI 组件
+│   └── SortBarUI/         # 可复用 SwiftUI 组件
 ├── Settings/          # 设置界面
 ├── Permissions/       # 权限管理
 ├── Hotkeys/           # 快捷键功能
@@ -116,36 +116,36 @@ Ice/
 
 ## 权限设置
 
-Ice 运行时需要以下系统权限：
+SortBar 运行时需要以下系统权限：
 
 ### 辅助功能权限（必需）
 
 1. 首次运行时会自动弹出权限请求
 2. 或者手动设置：**系统设置** → **隐私与安全性** → **辅助功能**
-3. 找到 Ice（或 Xcode）并勾选
+3. 找到 SortBar（或 Xcode）并勾选
 
 ### 屏幕录制权限（推荐）
 
 1. **系统设置** → **隐私与安全性** → **屏幕录制**
-2. 找到 Ice（或 Xcode）并勾选
+2. 找到 SortBar（或 Xcode）并勾选
 3. 如果图标不显示，尝试取消勾选后重新勾选
 
-> **注意**：调试时，权限可能会关联到 Xcode 而不是 Ice.app。两者都需要授权。
+> **注意**：调试时，权限可能会关联到 Xcode 而不是 SortBar.app。两者都需要授权。
 
 ## 常见问题
 
-### 1. "Ice" 需要辅助功能权限
+### 1. "SortBar" 需要辅助功能权限
 
-这是正常的权限请求。点击"打开系统设置"，然后在辅助功能列表中勾选 Ice 或 Xcode。
+这是正常的权限请求。点击"打开系统设置"，然后在辅助功能列表中勾选 SortBar 或 Xcode。
 
 ### 2. 菜单栏布局中图标不显示
 
 原因是缺少屏幕录制权限：
 1. 打开 **系统设置** → **隐私与安全性** → **屏幕录制**
-2. 勾选 Ice 和 Xcode
+2. 勾选 SortBar 和 Xcode
 3. 完全退出并重新运行应用
 
-### 3. 构建失败："Signing for 'Ice' requires a development team"
+### 3. 构建失败："Signing for 'SortBar' requires a development team"
 
 需要配置代码签名，请参考上面的"配置签名"步骤。
 
@@ -174,7 +174,7 @@ swiftlint --fix
 | MenuBarManager.swift | `performSetup()` | 菜单栏初始化 |
 | MenuBarItemImageCache.swift | `updateCache()` | 图像缓存更新 |
 | ScreenCapture.swift | `checkPermissions()` | 权限检查 |
-| IceBar.swift | `show(section:on:)` | Ice Bar 显示逻辑 |
+| SortBarBar.swift | `show(section:on:)` | SortBar Bar 显示逻辑 |
 
 ## 构建配置
 
@@ -188,4 +188,4 @@ swiftlint --fix
 ## 联系方式
 
 如有问题，请在 GitHub 仓库提交 Issue：
-https://github.com/jordanbaird/Ice/issues
+https://github.com/jordanbaird/SortBar/issues
