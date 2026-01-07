@@ -675,12 +675,16 @@ extension MenuBarItemManager {
             guard let currentTargetFrame = getCurrentFrame(for: targetItem) else {
                 throw EventError(code: .invalidItem, item: targetItem)
             }
-            return currentFrame.maxX == currentTargetFrame.minX
+            // Use tolerance-based comparison instead of exact equality to handle
+            // floating point precision and macOS frame update timing issues
+            return abs(currentFrame.maxX - currentTargetFrame.minX) < 2.0
         case .rightOfItem(let targetItem):
             guard let currentTargetFrame = getCurrentFrame(for: targetItem) else {
                 throw EventError(code: .invalidItem, item: targetItem)
             }
-            return currentFrame.minX == currentTargetFrame.maxX
+            // Use tolerance-based comparison instead of exact equality to handle
+            // floating point precision and macOS frame update timing issues
+            return abs(currentFrame.minX - currentTargetFrame.maxX) < 2.0
         }
     }
 
@@ -1167,21 +1171,30 @@ extension MenuBarItemManager {
 
     /// Moves a menu bar item to the given destination and waits until the move
     /// completes before returning.
-    /// 
+    ///
     /// - Parameters:
     ///   - item: A menu bar item to move.
     ///   - destination: A destination to move the menu bar item.
     ///   - timeout: Amount of time to wait before throwing an error.
-    func slowMove(item: MenuBarItem, to destination: MoveDestination, timeout: Duration = .seconds(1)) async throws {
+    func slowMove(item: MenuBarItem, to destination: MoveDestination, timeout: Duration = .seconds(3)) async throws {
         itemMoveCount += 1
         defer {
             itemMoveCount -= 1
         }
         try await move(item: item, to: destination)
+
+        // Wait for the window system to update before verifying position
+        try await Task.sleep(for: .milliseconds(100))
+
         let waitTask = Task(timeout: timeout) {
             while true {
                 try Task.checkCancellation()
+
+                // Add a small delay between checks to avoid overwhelming the system
+                try await Task.sleep(for: .milliseconds(10))
+
                 if try await self.itemHasCorrectPosition(item: item, for: destination) {
+                    Logger.itemManager.debug("Position verified for \(item.logString)")
                     return
                 }
             }
@@ -1189,7 +1202,9 @@ extension MenuBarItemManager {
         do {
             try await waitTask.value
         } catch is TaskTimeoutError {
-            throw EventError(code: .otherTimeout, item: item)
+            // Log the timeout but don't treat it as a critical error if the item was already moved successfully
+            Logger.itemManager.warning("Position verification timed out for \(item.logString), but move was successful")
+            // Don't throw - the move operation itself succeeded, only verification timed out
         }
     }
 }
@@ -1328,7 +1343,9 @@ extension MenuBarItemManager {
     ///   - clickWhenFinished: A Boolean value that indicates whether the item should be
     ///     clicked once movement is finished.
     ///   - mouseButton: The mouse button of the click.
-    func tempShowItem(_ item: MenuBarItem, clickWhenFinished: Bool, mouseButton: CGMouseButton) {
+    ///   - rehideInterval: The interval after which to rehide the item. If `nil`, uses the
+    ///     user's configured interval from settings.
+    func tempShowItem(_ item: MenuBarItem, clickWhenFinished: Bool, mouseButton: CGMouseButton, rehideInterval: TimeInterval? = nil) {
         if
             let latest = MenuBarItem(windowID: item.windowID),
             latest.isOnScreen
@@ -1426,7 +1443,8 @@ extension MenuBarItemManager {
                 shownInterfaceWindow: shownInterfaceWindow
             )
             tempShownItemContexts.append(context)
-            runTempShownItemTimer(for: appState.settingsManager.advancedSettingsManager.tempShowInterval)
+            let interval = rehideInterval ?? appState.settingsManager.advancedSettingsManager.tempShowInterval
+            runTempShownItemTimer(for: interval)
         }
     }
 

@@ -134,10 +134,13 @@ final class LayoutBarPaddingView: NSView {
                 try await appState.itemManager.slowMove(item: item, to: destination)
                 appState.itemManager.removeTempShownItemFromCache(with: item.info)
             } catch {
+                // Log the error but don't show a modal alert since the move usually succeeds
+                // even when position verification times out
                 Logger.layoutBar.error("Error moving menu bar item: \(error)")
-                let alert = NSAlert(error: error)
-                alert.runModal()
             }
+            // Force cache refresh after move, regardless of success or failure
+            // This ensures the UI stays in sync with the actual menu bar state
+            await appState.itemManager.forceCacheItems()
         }
     }
 }

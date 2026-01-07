@@ -296,7 +296,22 @@ private struct IceBarContentView: View {
                 // and keeps dark background when brightness < 0.4, text is always white
                 .foregroundStyle(.white)
                 .clipShape(clipShape)
-                .shadow(color: .black.opacity(shadowOpacity), radius: 2.5)
+                // Enhanced shadow for better visibility on any background
+                .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
+                .shadow(color: .black.opacity(0.5), radius: 8, y: 4)
+                // Subtle border for better definition
+                .overlay {
+                    clipShape
+                        .inset(by: 0.5)
+                        .stroke(lineWidth: 1)
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.white.opacity(0.2), .white.opacity(0.05)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
 
             if configuration.current.hasBorder {
                 clipShape
@@ -369,7 +384,7 @@ private struct IceBarItemView: View {
             closePanel()
             Task {
                 try await Task.sleep(for: .milliseconds(25))
-                itemManager.tempShowItem(item, clickWhenFinished: true, mouseButton: .left)
+                itemManager.tempShowItem(item, clickWhenFinished: true, mouseButton: .left, rehideInterval: 0.5)
             }
         }
     }
@@ -382,7 +397,7 @@ private struct IceBarItemView: View {
             closePanel()
             Task {
                 try await Task.sleep(for: .milliseconds(25))
-                itemManager.tempShowItem(item, clickWhenFinished: true, mouseButton: .right)
+                itemManager.tempShowItem(item, clickWhenFinished: true, mouseButton: .right, rehideInterval: 0.5)
             }
         }
     }
