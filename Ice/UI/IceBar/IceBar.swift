@@ -67,7 +67,10 @@ final class IceBarPanel: NSPanel {
                         // Only continue if the menu bar is automatically hidden, as Ice
                         // can't currently display its menu bar items.
                         appState.menuBarManager.isMenuBarHiddenBySystemUserDefaults,
-                        let info = window.flatMap({ WindowInfo(windowID: CGWindowID($0.windowNumber)) }),
+                        let window,
+                        window.windowNumber > 0,
+                        window.windowNumber <= Int(UInt32.max),
+                        let info = WindowInfo(windowID: CGWindowID(window.windowNumber)),
                         // Window being offscreen means the menu bar is currently hidden.
                         // Close the bar, as things will start to look weird if we don't.
                         !info.isOnScreen
@@ -289,7 +292,9 @@ private struct IceBarContentView: View {
                 .padding(.horizontal, horizontalPadding)
                 .padding(.vertical, verticalPadding)
                 .layoutBarStyle(appState: appState, averageColorInfo: colorManager.colorInfo)
-                .foregroundStyle(colorManager.colorInfo?.color.brightness ?? 0 > 0.67 ? .black : .white)
+                // Since layoutBarStyle now uses dark background when brightness >= 0.4,
+                // and keeps dark background when brightness < 0.4, text is always white
+                .foregroundStyle(.white)
                 .clipShape(clipShape)
                 .shadow(color: .black.opacity(shadowOpacity), radius: 2.5)
 

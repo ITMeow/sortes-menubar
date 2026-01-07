@@ -110,7 +110,6 @@ final class MenuBarItemImageCache: ObservableObject {
         let backingScaleFactor = screen.backingScaleFactor
         let displayBounds = CGDisplayBounds(screen.displayID)
         let option: CGWindowImageOption = [.boundsIgnoreFraming, .bestResolution]
-        let defaultItemThickness = NSStatusBar.system.thickness * backingScaleFactor
 
         var itemInfos = [CGWindowID: MenuBarItemInfo]()
         var itemFrames = [CGWindowID: CGRect]()
@@ -144,49 +143,86 @@ final class MenuBarItemImageCache: ObservableObject {
                     continue
                 }
 
-                let frame = CGRect(
+                // Crop to the item's position in the composite image - keep original height
+                let itemRectInComposite = CGRect(
                     x: (itemFrame.origin.x - frame.origin.x) * backingScaleFactor,
                     y: (itemFrame.origin.y - frame.origin.y) * backingScaleFactor,
                     width: itemFrame.width * backingScaleFactor,
                     height: itemFrame.height * backingScaleFactor
                 )
 
-                guard let itemImage = compositeImage.cropping(to: frame) else {
+                guard let itemImage = compositeImage.cropping(to: itemRectInComposite) else {
                     continue
                 }
 
+                // Store image without height normalization
                 images[itemInfo] = itemImage
             }
         } else {
             Logger.imageCache.warning("Composite image capture failed. Attempting to capturing items individually.")
 
             for windowID in windowIDs {
-                guard
-                    let itemInfo = itemInfos[windowID],
-                    let itemFrame = itemFrames[windowID]
-                else {
+                guard let itemInfo = itemInfos[windowID] else {
                     continue
                 }
 
-                let frame = CGRect(
-                    x: 0,
-                    y: ((itemFrame.height * backingScaleFactor) / 2) - (defaultItemThickness / 2),
-                    width: itemFrame.width * backingScaleFactor,
-                    height: defaultItemThickness
-                )
-
-                guard
-                    let itemImage = ScreenCapture.captureWindow(windowID, option: option),
-                    let croppedImage = itemImage.cropping(to: frame)
-                else {
+                guard let itemImage = ScreenCapture.captureWindow(windowID, option: option) else {
                     continue
                 }
 
-                images[itemInfo] = croppedImage
+                // Store image without height normalization
+                images[itemInfo] = itemImage
             }
         }
 
         return images
+    }
+
+    /// Normalizes an image to a standard height, centering the content vertically.
+    private func normalizeImageHeight(_ image: CGImage, to targetHeight: CGFloat) -> CGImage? {
+        let imageHeight = CGFloat(image.height)
+        let imageWidth = CGFloat(image.width)
+
+        // If already at target height, return as-is
+        if abs(imageHeight - targetHeight) < 1 {
+            return image
+        }
+
+        // If taller than target, crop from center
+        if imageHeight > targetHeight {
+            let cropRect = CGRect(
+                x: 0,
+                y: (imageHeight - targetHeight) / 2,
+                width: imageWidth,
+                height: targetHeight
+            )
+            return image.cropping(to: cropRect)
+        }
+
+        // If shorter than target, create a new image with the content centered
+        let targetHeightInt = Int(targetHeight)
+        let imageWidthInt = Int(imageWidth)
+
+        guard let context = CGContext(
+            data: nil,
+            width: imageWidthInt,
+            height: targetHeightInt,
+            bitsPerComponent: image.bitsPerComponent,
+            bytesPerRow: 0,
+            space: image.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: image.bitmapInfo.rawValue
+        ) else {
+            return nil
+        }
+
+        // Clear the context (transparent background)
+        context.clear(CGRect(x: 0, y: 0, width: imageWidthInt, height: targetHeightInt))
+
+        // Draw the original image centered vertically
+        let yOffset = (targetHeight - imageHeight) / 2
+        context.draw(image, in: CGRect(x: 0, y: yOffset, width: imageWidth, height: imageHeight))
+
+        return context.makeImage()
     }
 
     /// Updates the cache for the given sections, without checking whether caching is necessary.

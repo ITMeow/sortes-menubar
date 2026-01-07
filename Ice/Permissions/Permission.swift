@@ -6,6 +6,7 @@
 import AXSwift
 import Combine
 import Cocoa
+import OSLog
 import ScreenCaptureKit
 
 // MARK: - Permission
@@ -72,7 +73,12 @@ class Permission: ObservableObject, Identifiable {
                 guard let self else {
                     return
                 }
-                hasPermission = check()
+                let previousPermission = hasPermission
+                let currentPermission = check()
+                if previousPermission != currentPermission {
+                    Logger.permission.debug("\(self.title) permission changed: \(previousPermission) -> \(currentPermission)")
+                }
+                hasPermission = currentPermission
             }
     }
 
@@ -155,4 +161,10 @@ final class ScreenRecordingPermission: Permission {
             }
         )
     }
+}
+
+// MARK: - Logger
+
+private extension Logger {
+    static let permission = Logger(category: "Permission")
 }

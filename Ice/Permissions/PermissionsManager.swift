@@ -5,6 +5,7 @@
 
 import Combine
 import Foundation
+import OSLog
 
 /// A type that manages the permissions of the app.
 @MainActor
@@ -56,11 +57,19 @@ final class PermissionsManager: ObservableObject {
             guard let self else {
                 return
             }
+            let accessibilityHasPermission = accessibilityPermission.hasPermission
+            let screenRecordingHasPermission = screenRecordingPermission.hasPermission
+
+            Logger.permissionsManager.debug("Permission state check - Accessibility: \(accessibilityHasPermission), ScreenRecording: \(screenRecordingHasPermission)")
+
             if allPermissions.allSatisfy({ $0.hasPermission }) {
+                Logger.permissionsManager.debug("All permissions granted")
                 permissionsState = .hasAllPermissions
             } else if requiredPermissions.allSatisfy({ $0.hasPermission }) {
+                Logger.permissionsManager.debug("Required permissions granted (limited mode available)")
                 permissionsState = .hasRequiredPermissions
             } else {
+                Logger.permissionsManager.debug("Missing required permissions")
                 permissionsState = .missingPermissions
             }
         }
@@ -75,4 +84,10 @@ final class PermissionsManager: ObservableObject {
             permission.stopCheck()
         }
     }
+}
+
+// MARK: - Logger
+
+private extension Logger {
+    static let permissionsManager = Logger(category: "PermissionsManager")
 }

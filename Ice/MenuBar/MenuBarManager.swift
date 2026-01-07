@@ -78,6 +78,13 @@ final class MenuBarManager: ObservableObject {
             MenuBarSection(name: .hidden, appState: appState),
             MenuBarSection(name: .alwaysHidden, appState: appState),
         ]
+
+        // Now that all sections are in the array, notify each control item
+        // that it has been assigned to a section. This triggers a refresh
+        // of the status item's appearance and visibility.
+        for section in sections {
+            section.controlItem.didAssignToSection()
+        }
     }
 
     /// Configures the internal observers for the manager.

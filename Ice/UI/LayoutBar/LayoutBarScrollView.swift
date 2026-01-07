@@ -7,6 +7,7 @@ import Cocoa
 
 final class LayoutBarScrollView: NSScrollView {
     private let paddingView: LayoutBarPaddingView
+    private weak var appState: AppState?
 
     /// The amount of space between each arranged view.
     var spacing: CGFloat {
@@ -32,6 +33,7 @@ final class LayoutBarScrollView: NSScrollView {
     ///   - spacing: The amount of space between each arranged view.
     init(appState: AppState, section: MenuBarSection, spacing: CGFloat) {
         self.paddingView = LayoutBarPaddingView(appState: appState, section: section, spacing: spacing)
+        self.appState = appState
 
         super.init(frame: .zero)
 
@@ -43,7 +45,9 @@ final class LayoutBarScrollView: NSScrollView {
         self.verticalScrollElasticity = .none
         self.horizontalScrollElasticity = .none
 
+        // Disable default background drawing - we'll draw our own
         self.drawsBackground = false
+        self.contentView.drawsBackground = false
 
         self.documentView = self.paddingView
 

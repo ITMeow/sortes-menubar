@@ -310,6 +310,12 @@ extension MenuBarItemManager {
         itemCache = cache
     }
 
+    /// Forces a cache refresh by clearing the cached window IDs and then caching items.
+    func forceCacheItems() async {
+        cachedItemWindowIDs = []
+        await cacheItemsIfNeeded()
+    }
+
     /// Caches the current menu bar items if needed, ensuring that the control
     /// items are in the correct order.
     func cacheItemsIfNeeded() async {
@@ -334,6 +340,31 @@ extension MenuBarItemManager {
         }
 
         var items = MenuBarItem.getMenuBarItems(onScreenOnly: false, activeSpaceOnly: true)
+
+        // Debug: Log all items to find out why hiddenControlItem is not found
+        Logger.itemManager.debug("Found \(items.count) menu bar items")
+        let currentBundleID = Constants.bundleIdentifier
+        Logger.itemManager.debug("Current bundle identifier: '\(currentBundleID)'")
+
+        var iceItemsFound = 0
+        for item in items {
+            let itemBundleID = item.owningApplication?.bundleIdentifier ?? "<nil>"
+            // Check if this could be an Ice item
+            if itemBundleID == currentBundleID || item.info.namespace.rawValue == currentBundleID {
+                iceItemsFound += 1
+                Logger.itemManager.debug("Potential Ice item: namespace='\(item.info.namespace.rawValue)', title='\(item.info.title)', bundleID='\(itemBundleID)', windowID=\(item.windowID)")
+            }
+        }
+
+        if iceItemsFound == 0 {
+            Logger.itemManager.warning("No Ice items found in menu bar! Listing first 10 items...")
+            for item in items.prefix(10) {
+                let itemBundleID = item.owningApplication?.bundleIdentifier ?? "<nil>"
+                Logger.itemManager.debug("Item: namespace='\(item.info.namespace.rawValue)', title='\(item.info.title)', bundleID='\(itemBundleID)'")
+            }
+        }
+
+        Logger.itemManager.debug("Looking for hiddenControlItem: namespace='\(MenuBarItemInfo.hiddenControlItem.namespace.rawValue)', title='\(MenuBarItemInfo.hiddenControlItem.title)'")
 
         let hiddenControlItem = items.firstIndex(matching: .hiddenControlItem).map { items.remove(at: $0) }
         let alwaysHiddenControlItem = items.firstIndex(matching: .alwaysHiddenControlItem).map { items.remove(at: $0) }
@@ -1333,8 +1364,13 @@ extension MenuBarItemManager {
         }
 
         // Remove all items up to the hidden control item.
-        items.trimPrefix { $0.info != .hiddenControlItem }
-        // Remove the hidden control item.
+        // Use title-only matching since macOS may report Ice items under different namespaces
+        items.trimPrefix { $0.info.title != MenuBarItemInfo.hiddenControlItem.title }
+        // Remove the hidden control item (if present).
+        guard !items.isEmpty else {
+            Logger.itemManager.warning("No hidden control item found in items list")
+            return
+        }
         items.removeFirst()
         // Remove all offscreen items.
         items.trimPrefix { !$0.isOnScreen }

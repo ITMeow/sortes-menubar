@@ -133,15 +133,20 @@ final class AppState: ObservableObject {
             Logger.appState.warning("No settings window!")
         }
 
-        Publishers.Merge(
+        Publishers.CombineLatest3(
             navigationState.$isAppFrontmost,
-            navigationState.$isSettingsPresented
+            navigationState.$isSettingsPresented,
+            navigationState.$settingsNavigationIdentifier
         )
         .debounce(for: 0.1, scheduler: DispatchQueue.main)
-        .sink { [weak self] shouldUpdate in
+        .sink { [weak self] isAppFrontmost, isSettingsPresented, settingsNavigationIdentifier in
+            guard let self else {
+                return
+            }
+            // Only update if conditions are met for showing the layout
             guard
-                let self,
-                shouldUpdate
+                isAppFrontmost || isSettingsPresented,
+                settingsNavigationIdentifier == .menuBarLayout
             else {
                 return
             }

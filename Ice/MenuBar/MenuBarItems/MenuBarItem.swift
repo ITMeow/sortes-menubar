@@ -125,9 +125,20 @@ struct MenuBarItem {
     /// This initializer does not perform any checks on the window to ensure that
     /// it is a valid menu bar item window. Only call this initializer if you are
     /// certain that the window is valid.
-    private init(uncheckedItemWindow itemWindow: WindowInfo) {
+    private init(uncheckedItemWindow itemWindow: WindowInfo, index: Int = 0) {
         self.window = itemWindow
-        self.info = MenuBarItemInfo(uncheckedItemWindow: itemWindow)
+        self.info = MenuBarItemInfo(uncheckedItemWindow: itemWindow).withIndex(index)
+    }
+
+    /// Creates a menu bar item with the given info (used for updating index).
+    private init(window: WindowInfo, info: MenuBarItemInfo) {
+        self.window = window
+        self.info = info
+    }
+
+    /// Returns a copy of this item with the given index.
+    func withIndex(_ newIndex: Int) -> MenuBarItem {
+        MenuBarItem(window: window, info: info.withIndex(newIndex))
     }
 
     /// Creates a menu bar item.
@@ -194,13 +205,44 @@ extension MenuBarItem {
             }
         }
 
-        return Bridging.getWindowList(option: option).lazy
+        let items = Bridging.getWindowList(option: option).lazy
             .filter(boundsPredicate)
             .compactMap { windowID in
                 MenuBarItem(windowID: windowID)
             }
             .filter(titlePredicate)
             .sortedByOrderInMenuBar()
+
+        // Assign unique indices to items with duplicate namespace:title combinations
+        return assignUniqueIndices(to: items)
+    }
+
+    /// Assigns unique indices to items that have the same namespace:title combination.
+    private static func assignUniqueIndices(to items: [MenuBarItem]) -> [MenuBarItem] {
+        // Count occurrences of each namespace:title combination
+        var counts = [String: Int]()
+        for item in items {
+            let key = "\(item.info.namespace.rawValue):\(item.info.title)"
+            counts[key, default: 0] += 1
+        }
+
+        // Only process if there are duplicates
+        let hasDuplicates = counts.values.contains { $0 > 1 }
+        guard hasDuplicates else {
+            return items
+        }
+
+        // Assign indices to duplicates
+        var currentIndex = [String: Int]()
+        return items.map { item in
+            let key = "\(item.info.namespace.rawValue):\(item.info.title)"
+            guard counts[key, default: 0] > 1 else {
+                return item
+            }
+            let index = currentIndex[key, default: 0]
+            currentIndex[key] = index + 1
+            return item.withIndex(index)
+        }
     }
 }
 
@@ -236,5 +278,6 @@ private extension MenuBarItemInfo {
         } else {
             self.title = ""
         }
+        self.index = 0
     }
 }

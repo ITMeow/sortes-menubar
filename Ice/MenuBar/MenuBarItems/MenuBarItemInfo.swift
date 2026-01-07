@@ -11,6 +11,10 @@ struct MenuBarItemInfo: Hashable, CustomStringConvertible {
     /// The title of the item.
     let title: String
 
+    /// An index to distinguish items with the same namespace and title.
+    /// This is used when multiple menu bar items have identical namespace:title combinations.
+    let index: Int
+
     /// A Boolean value that indicates whether the item is within the
     /// "Special" namespace.
     var isSpecial: Bool {
@@ -18,13 +22,27 @@ struct MenuBarItemInfo: Hashable, CustomStringConvertible {
     }
 
     var description: String {
-        namespace.rawValue + ":" + title
+        if index > 0 {
+            return namespace.rawValue + ":" + title + "#\(index)"
+        }
+        return namespace.rawValue + ":" + title
     }
 
-    /// Creates a simplified item with the given namespace and title.
-    init(namespace: Namespace, title: String) {
+    /// Creates a simplified item with the given namespace, title, and optional index.
+    init(namespace: Namespace, title: String, index: Int = 0) {
         self.namespace = namespace
         self.title = title
+        self.index = index
+    }
+
+    /// Creates a copy of this item with a new index.
+    func withIndex(_ newIndex: Int) -> MenuBarItemInfo {
+        MenuBarItemInfo(namespace: namespace, title: title, index: newIndex)
+    }
+
+    /// Returns true if this item matches another item, ignoring the index.
+    func matchesIgnoringIndex(_ other: MenuBarItemInfo) -> Bool {
+        namespace == other.namespace && title == other.title
     }
 }
 
@@ -107,7 +125,19 @@ extension MenuBarItemInfo: Codable {
     init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
         let string = try container.decode(String.self)
-        let components = string.components(separatedBy: ":")
+
+        // Check for index suffix (e.g., "namespace:title#2")
+        var mainPart = string
+        var decodedIndex = 0
+        if let hashIndex = string.lastIndex(of: "#") {
+            let indexPart = String(string[string.index(after: hashIndex)...])
+            if let parsedIndex = Int(indexPart) {
+                decodedIndex = parsedIndex
+                mainPart = String(string[..<hashIndex])
+            }
+        }
+
+        let components = mainPart.components(separatedBy: ":")
         let count = components.count
         if count > 2 {
             self.namespace = Namespace(components[0])
@@ -126,11 +156,16 @@ extension MenuBarItemInfo: Codable {
                 )
             )
         }
+        self.index = decodedIndex
     }
 
     func encode(to encoder: any Encoder) throws {
         var container = encoder.singleValueContainer()
-        try container.encode([namespace.rawValue, title].joined(separator: ":"))
+        var encoded = [namespace.rawValue, title].joined(separator: ":")
+        if index > 0 {
+            encoded += "#\(index)"
+        }
+        try container.encode(encoded)
     }
 }
 

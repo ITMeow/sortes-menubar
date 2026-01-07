@@ -66,7 +66,14 @@ final class ControlItem {
         guard let window else {
             return nil
         }
-        return CGWindowID(window.windowNumber)
+        // windowNumber can be negative if the window is not on screen
+        // CGWindowID is UInt32, so we must check for valid positive values
+        // that fit within UInt32 range
+        let windowNumber = window.windowNumber
+        guard windowNumber > 0, windowNumber <= Int(UInt32.max) else {
+            return nil
+        }
+        return CGWindowID(windowNumber)
     }
 
     /// A Boolean value that indicates whether the control item serves as
@@ -327,6 +334,31 @@ final class ControlItem {
         }
         button.target = self
         button.action = #selector(performAction)
+    }
+
+    /// Called after the control item has been assigned to a section.
+    /// This triggers a refresh of the status item's appearance and visibility.
+    func didAssignToSection() {
+        // Re-trigger the state update now that section is available
+        updateStatusItem(with: state)
+        // Ensure the status item has the correct length
+        if let section {
+            switch section.name {
+            case .visible:
+                isVisible = true
+                statusItem.length = Lengths.standard
+            case .hidden:
+                // Hidden section control item should always be visible and expanded initially
+                isVisible = true
+                statusItem.length = Lengths.expanded
+            case .alwaysHidden:
+                // Only add to menu bar if enabled in settings
+                if let appState, appState.settingsManager.advancedSettingsManager.enableAlwaysHiddenSection {
+                    isVisible = true
+                    statusItem.length = Lengths.expanded
+                }
+            }
+        }
     }
 
     /// Updates the appearance of the status item using the given hiding state.

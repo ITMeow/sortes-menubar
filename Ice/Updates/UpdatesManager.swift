@@ -20,10 +20,19 @@ final class UpdatesManager: NSObject, ObservableObject {
 
     /// The underlying updater controller.
     private(set) lazy var updaterController = SPUStandardUpdaterController(
-        startingUpdater: true,
+        startingUpdater: !isDebugBuild,
         updaterDelegate: self,
         userDriverDelegate: self
     )
+
+    /// A Boolean value that indicates whether this is a debug build.
+    private var isDebugBuild: Bool {
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }
 
     /// The underlying updater.
     var updater: SPUUpdater {

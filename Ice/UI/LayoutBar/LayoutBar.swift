@@ -34,28 +34,39 @@ struct LayoutBar: View {
         RoundedRectangle(cornerRadius: 9, style: .circular)
     }
 
+    /// Dark background color for the layout bar
+    private var backgroundColor: Color {
+        // Always use a dark background to ensure icons are visible
+        Color(red: 0.18, green: 0.18, blue: 0.18)
+    }
+
     init(section: MenuBarSection, spacing: CGFloat = 0) {
         self.section = section
         self.spacing = spacing
     }
 
     var body: some View {
-        conditionalBody
-            .frame(height: 50)
-            .frame(maxWidth: .infinity)
-            .layoutBarStyle(appState: appState, averageColorInfo: menuBarManager.averageColorInfo)
-            .clipShape(backgroundShape)
-            .overlay {
-                backgroundShape
-                    .stroke(.quaternary)
-            }
+        ZStack {
+            // Background layer - always dark for icon visibility
+            backgroundColor
+
+            // Content layer
+            conditionalBody
+        }
+        .frame(height: 50)
+        .frame(maxWidth: .infinity)
+        .clipShape(backgroundShape)
+        .overlay {
+            backgroundShape
+                .stroke(.quaternary)
+        }
     }
 
     @ViewBuilder
     private var conditionalBody: some View {
         if imageCache.cacheFailed(for: section.name) {
             Text("Unable to display menu bar items")
-                .foregroundStyle(menuBarManager.averageColorInfo?.color.brightness ?? 0 > 0.67 ? .black : .white)
+                .foregroundStyle(.white)
         } else {
             Representable(appState: appState, section: section, spacing: spacing)
         }

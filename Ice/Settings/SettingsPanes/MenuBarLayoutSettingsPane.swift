@@ -18,6 +18,30 @@ struct MenuBarLayoutSettingsPane: View {
                 header
                 layoutBars
             }
+            .onAppear {
+                // Force refresh item cache and image cache when this view appears
+                Task {
+                    Logger.layoutPane.info("MenuBarLayoutSettingsPane appeared, forcing cache refresh")
+
+                    // Force refresh items
+                    await appState.itemManager.forceCacheItems()
+
+                    // Log item cache status
+                    let visibleItems = appState.itemManager.itemCache[.visible]
+                    let hiddenItems = appState.itemManager.itemCache[.hidden]
+                    let alwaysHiddenItems = appState.itemManager.itemCache[.alwaysHidden]
+                    Logger.layoutPane.info("Item cache - visible: \(visibleItems.count), hidden: \(hiddenItems.count), alwaysHidden: \(alwaysHiddenItems.count)")
+
+                    // Force refresh images
+                    if ScreenCapture.cachedCheckPermissions(reset: true) {
+                        Logger.layoutPane.info("Screen capture permission granted, updating image cache")
+                        await appState.imageCache.updateCacheWithoutChecks(sections: MenuBarSection.Name.allCases)
+                        Logger.layoutPane.info("Image cache updated, images count: \(appState.imageCache.images.count)")
+                    } else {
+                        Logger.layoutPane.warning("Screen capture permission NOT granted")
+                    }
+                }
+            }
         }
     }
 
@@ -87,4 +111,10 @@ struct MenuBarLayoutSettingsPane: View {
             }
         }
     }
+}
+
+// MARK: - Logger
+
+private extension Logger {
+    static let layoutPane = Logger(category: "MenuBarLayoutSettingsPane")
 }

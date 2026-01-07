@@ -316,8 +316,25 @@ extension CGImage {
 extension Collection where Element == MenuBarItem {
     /// Returns the first index where the menu bar item matching the specified
     /// info appears in the collection.
+    ///
+    /// For Ice control items (HItem, SItem, AHItem), matching is done by title only
+    /// because macOS may report these items under a different namespace (e.g., controlcenter).
     func firstIndex(matching info: MenuBarItemInfo) -> Index? {
-        firstIndex { $0.info == info }
+        // Check if this is an Ice control item that needs special matching
+        let iceControlItemTitles = [
+            ControlItem.Identifier.iceIcon.rawValue,     // "SItem"
+            ControlItem.Identifier.hidden.rawValue,       // "HItem"
+            ControlItem.Identifier.alwaysHidden.rawValue, // "AHItem"
+        ]
+
+        if info.namespace == .ice && iceControlItemTitles.contains(info.title) {
+            // For Ice control items, match by title only since macOS may
+            // report them under com.apple.controlcenter namespace
+            return firstIndex { $0.info.title == info.title }
+        }
+
+        // For all other items, use exact matching
+        return firstIndex { $0.info == info }
     }
 }
 
