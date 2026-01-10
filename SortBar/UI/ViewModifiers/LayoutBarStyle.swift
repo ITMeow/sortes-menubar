@@ -22,33 +22,30 @@ extension View {
                 let brightness = averageColorInfo.color.brightness ?? 1.0
                 if brightness >= 0.4 {
                     // Background is too bright, use a dark gray instead
-                    Color(red: 0.18, green: 0.18, blue: 0.18)
+                    Color(red: 0.1, green: 0.1, blue: 0.1).opacity(0.9)
                         .overlay(
-                            Material.bar
-                                .opacity(0.1)
-                                .blendMode(.softLight)
+                            Material.ultraThin
+                                .opacity(0.4)
+                                .blendMode(.luminosity)
                         )
                 } else {
                     switch averageColorInfo.source {
                     case .menuBarWindow:
-                        Color(cgColor: averageColorInfo.color)
+                        Color(cgColor: averageColorInfo.color).opacity(0.8)
                             .overlay(
-                                Material.bar
-                                    .opacity(0.2)
-                                    .blendMode(.softLight)
+                                Material.ultraThin
+                                    .opacity(0.4)
+                                    .blendMode(.overlay)
                             )
                     case .desktopWallpaper:
-                        Color(cgColor: averageColorInfo.color)
-                            .overlay(
-                                Material.bar
-                                    .opacity(0.5)
-                                    .blendMode(.softLight)
-                            )
+                        Color(cgColor: averageColorInfo.color).opacity(0.6)
+                            .background(Material.ultraThin)
                     }
                 }
             } else {
-                // Fallback to a dark gray that works well for menu bar icons
-                Color(red: 0.18, green: 0.18, blue: 0.18)
+                // Fallback to a sleek dark glass
+                Color.black.opacity(0.75)
+                    .background(Material.ultraThin)
             }
         }
         .overlay {

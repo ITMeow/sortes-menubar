@@ -52,11 +52,6 @@ struct SettingsView: View {
                 ForEach(SettingsNavigationIdentifier.allCases, id: \.self) { identifier in
                     sidebarItem(for: identifier)
                 }
-            } header: {
-                Text("SortBar")
-                    .font(.system(size: 36, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .padding(.vertical, 5)
             }
             .collapsible(false)
         }
@@ -87,7 +82,7 @@ struct SettingsView: View {
     private func sidebarItem(for identifier: SettingsNavigationIdentifier) -> some View {
         Label {
             Text(identifier.localized)
-                .font(.system(size: sidebarItemFontSize))
+                .font(.system(size: sidebarItemFontSize, weight: .medium))
                 .padding(.leading, 2)
         } icon: {
             icon(for: identifier).view

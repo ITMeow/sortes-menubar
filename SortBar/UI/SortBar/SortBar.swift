@@ -274,11 +274,8 @@ private struct IceBarContentView: View {
     }
 
     private var clipShape: AnyInsettableShape {
-        if configuration.hasRoundedShape {
-            AnyInsettableShape(Capsule())
-        } else {
-            AnyInsettableShape(RoundedRectangle(cornerRadius: frame.height / 5, style: .continuous))
-        }
+        // Always use a sleek capsule shape for a modern, organic feel
+        AnyInsettableShape(Capsule(style: .continuous))
     }
 
     private var shadowOpacity: CGFloat {
@@ -287,29 +284,34 @@ private struct IceBarContentView: View {
 
     var body: some View {
         ZStack {
+            // Main Glass Surface
             content
                 .frame(height: contentHeight)
-                .padding(.horizontal, horizontalPadding)
-                .padding(.vertical, verticalPadding)
+                .padding(.horizontal, horizontalPadding + 4) // More breathing room
+                .padding(.vertical, verticalPadding + 2)
                 .layoutBarStyle(appState: appState, averageColorInfo: colorManager.colorInfo)
-                // Since layoutBarStyle now uses dark background when brightness >= 0.4,
-                // and keeps dark background when brightness < 0.4, text is always white
                 .foregroundStyle(.white)
                 .clipShape(clipShape)
-                // Enhanced shadow for better visibility on any background
-                .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
-                .shadow(color: .black.opacity(0.5), radius: 8, y: 4)
-                // Subtle border for better definition
+                
+                // 3. "Hyper-Glow" Shadow - Creates a suspended/floating effect
+                .shadow(color: .black.opacity(0.4), radius: 10, x: 0, y: 5)
+                .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
+                
+                // 4. Premium Glass Edge - A crisp, multi-stop gradient border
                 .overlay {
                     clipShape
                         .inset(by: 0.5)
-                        .stroke(lineWidth: 1)
-                        .foregroundStyle(
+                        .stroke(
                             LinearGradient(
-                                colors: [.white.opacity(0.2), .white.opacity(0.05)],
+                                stops: [
+                                    .init(color: .white.opacity(0.4), location: 0),
+                                    .init(color: .white.opacity(0.1), location: 0.4),
+                                    .init(color: .white.opacity(0.05), location: 1)
+                                ],
                                 startPoint: .top,
                                 endPoint: .bottom
-                            )
+                            ),
+                            lineWidth: 1
                         )
                 }
 

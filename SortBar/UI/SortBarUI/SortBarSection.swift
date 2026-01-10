@@ -26,7 +26,7 @@ struct SortBarSection<Header: View, Content: View, Footer: View>: View {
     private var hasDividers: Bool { options.contains(.hasDividers) }
 
     init(
-        spacing: CGFloat = 10,
+        spacing: CGFloat = 16,
         options: SortBarSectionOptions = .default,
         @ViewBuilder header: () -> Header,
         @ViewBuilder content: () -> Content,
@@ -40,7 +40,7 @@ struct SortBarSection<Header: View, Content: View, Footer: View>: View {
     }
 
     init(
-        spacing: CGFloat = 10,
+        spacing: CGFloat = 16,
         options: SortBarSectionOptions = .default,
         @ViewBuilder content: () -> Content,
         @ViewBuilder footer: () -> Footer
@@ -55,7 +55,7 @@ struct SortBarSection<Header: View, Content: View, Footer: View>: View {
     }
 
     init(
-        spacing: CGFloat = 10,
+        spacing: CGFloat = 16,
         options: SortBarSectionOptions = .default,
         @ViewBuilder header: () -> Header,
         @ViewBuilder content: () -> Content
@@ -70,7 +70,7 @@ struct SortBarSection<Header: View, Content: View, Footer: View>: View {
     }
 
     init(
-        spacing: CGFloat = 10,
+        spacing: CGFloat = 16,
         options: SortBarSectionOptions = .default,
         @ViewBuilder content: () -> Content
     ) where Header == EmptyView, Footer == EmptyView {
@@ -85,7 +85,7 @@ struct SortBarSection<Header: View, Content: View, Footer: View>: View {
 
     init(
         _ title: LocalizedStringKey,
-        spacing: CGFloat = 10,
+        spacing: CGFloat = 16,
         options: SortBarSectionOptions = .default,
         @ViewBuilder content: () -> Content
     ) where Header == Text, Footer == EmptyView {

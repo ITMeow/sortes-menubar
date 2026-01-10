@@ -41,145 +41,127 @@ struct AboutSettingsPane: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            mainForm
-            Spacer(minLength: 20)
-            bottomBar
-        }
-        .padding(30)
-    }
+        ScrollView {
+            VStack(spacing: 32) {
+                // Hero Section
+                VStack(spacing: 16) {
+                    if let nsImage = NSImage(named: NSImage.applicationIconName) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 128, height: 128)
+                            .shadow(color: .black.opacity(0.1), radius: 10, y: 5)
+                    }
 
-    @ViewBuilder
-    private var mainForm: some View {
-        SortBarForm(padding: EdgeInsets(top: 5, leading: 30, bottom: 30, trailing: 30), spacing: 0) {
-            appIconAndCopyrightSection
-                .layoutPriority(1)
+                    VStack(spacing: 4) {
+                        Text("SortBar")
+                            .font(.system(size: 48, weight: .bold))
+                            .foregroundStyle(.primary)
+                            .tracking(-1)
 
-            Spacer(minLength: 0)
-                .frame(maxHeight: 20)
+                        Text("Version \(Constants.versionString)")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.top, 20)
 
-            updatesSection
-                .layoutPriority(1)
-        }
-        .scrollDisabled(true)
-        .frame(maxHeight: 500)
-        .background(.quinary, in: RoundedRectangle(cornerRadius: 20, style: .circular))
-    }
-
-    @ViewBuilder
-    private var appIconAndCopyrightSection: some View {
-        SortBarSection(options: .plain) {
-            HStack(spacing: 10) {
-                if let nsImage = NSImage(named: NSImage.applicationIconName) {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 225)
+                // Updates Section
+                SortBarGroupBox {
+                    updatesSectionContent
                 }
 
-                VStack(alignment: .leading) {
-                    Text("SortBar")
-                        .font(.system(size: 72, weight: .medium))
-                        .foregroundStyle(.primary)
+                // Links Grid
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140))], spacing: 12) {
+                    linkButton("Acknowledgements", icon: "doc.text") {
+                        NSWorkspace.shared.open(acknowledgementsURL)
+                    }
+                    linkButton("Contribute", icon: "hammer.fill") {
+                        openURL(contributeURL)
+                    }
+                    linkButton("Report a Bug", icon: "ladybug.fill") {
+                        openURL(issuesURL)
+                    }
+                    linkButton("Support SortBar", icon: "heart.fill", color: .pink) {
+                        openURL(donateURL)
+                    }
+                }
+                
+                Text(Constants.copyrightString)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 10)
+            }
+            .padding(40)
+        }
+    }
 
-                    Text("Version \(Constants.versionString)")
-                        .font(.system(size: 18))
+    @ViewBuilder
+    private var updatesSectionContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Updates")
+                .font(.headline)
+            
+            VStack(spacing: 12) {
+                Toggle(
+                    "Automatically check for updates",
+                    isOn: updatesManager.bindings.automaticallyChecksForUpdates
+                )
+                
+                Toggle(
+                    "Automatically download updates",
+                    isOn: updatesManager.bindings.automaticallyDownloadsUpdates
+                )
+            }
+            
+            if updatesManager.canCheckForUpdates {
+                Divider()
+                HStack {
+                    Button("Check Now") {
+                        updatesManager.checkForUpdates()
+                    }
+                    Spacer()
+                    Text("Last checked: \(lastUpdateCheckString)")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
-
-                    Text(Constants.copyrightString)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.tertiary)
                 }
             }
         }
     }
 
+    @ViewBuilder
+    private func linkButton(_ title: String, icon: String, color: Color = .secondary, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundStyle(color)
+                Text(title)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // Unused but kept for reference if needed elsewhere
     @ViewBuilder
     private var updatesSection: some View {
-        SortBarSection(options: .hasDividers) {
-            automaticallyCheckForUpdates
-            automaticallyDownloadUpdates
-            if updatesManager.canCheckForUpdates {
-                checkForUpdates
-            }
-        }
-        .frame(maxWidth: 600)
-    }
-
-    @ViewBuilder
-    private var automaticallyCheckForUpdates: some View {
-        Toggle(
-            "Automatically check for updates",
-            isOn: updatesManager.bindings.automaticallyChecksForUpdates
-        )
-    }
-
-    @ViewBuilder
-    private var automaticallyDownloadUpdates: some View {
-        Toggle(
-            "Automatically download updates",
-            isOn: updatesManager.bindings.automaticallyDownloadsUpdates
-        )
-    }
-
-    @ViewBuilder
-    private var checkForUpdates: some View {
-        HStack {
-            Button("Check for Updates") {
-                updatesManager.checkForUpdates()
-            }
-            Spacer()
-            Text("Last checked: \(lastUpdateCheckString)")
-                .font(.caption)
-        }
+        EmptyView()
     }
 
     @ViewBuilder
     private var bottomBar: some View {
-        HStack {
-            Button("Quit Ice") {
-                NSApp.terminate(nil)
-            }
-            Spacer()
-            Button("Acknowledgements") {
-                NSWorkspace.shared.open(acknowledgementsURL)
-            }
-            Button("Contribute") {
-                openURL(contributeURL)
-            }
-            Button("Report a Bug") {
-                openURL(issuesURL)
-            }
-            Button("Support Ice", systemImage: "heart.circle.fill") {
-                openURL(donateURL)
-            }
-        }
-        .padding(8)
-        .buttonStyle(BottomBarButtonStyle())
-        .background(.quinary, in: Capsule(style: .circular))
-        .frame(height: 40)
-    }
-}
-
-private struct BottomBarButtonStyle: ButtonStyle {
-    @State private var isHovering = false
-
-    private var borderShape: some InsettableShape {
-        Capsule(style: .circular)
+        EmptyView()
     }
 
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background {
-                borderShape
-                    .fill(configuration.isPressed ? .tertiary : .quaternary)
-                    .opacity(isHovering ? 1 : 0)
-            }
-            .contentShape([.focusEffect, .interaction], borderShape)
-            .onHover { hovering in
-                isHovering = hovering
-            }
+    @ViewBuilder
+    private var mainForm: some View {
+        EmptyView()
     }
 }

@@ -31,13 +31,13 @@ struct LayoutBar: View {
     }
 
     private var backgroundShape: some InsettableShape {
-        RoundedRectangle(cornerRadius: 9, style: .circular)
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
     }
 
     /// Dark background color for the layout bar
     private var backgroundColor: Color {
-        // Always use a dark background to ensure icons are visible
-        Color(red: 0.18, green: 0.18, blue: 0.18)
+        // Semi-transparent dock-like appearance
+        Color.black.opacity(0.75)
     }
 
     init(section: MenuBarSection, spacing: CGFloat = 0) {
@@ -47,18 +47,28 @@ struct LayoutBar: View {
 
     var body: some View {
         ZStack {
-            // Background layer - always dark for icon visibility
+            // Background layer
             backgroundColor
+                .background(.ultraThinMaterial)
 
             // Content layer
             conditionalBody
         }
-        .frame(height: 50)
+        .frame(height: 52) // Slightly taller for better touch target
         .frame(maxWidth: .infinity)
         .clipShape(backgroundShape)
+        .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5) // Deep shadow
         .overlay {
             backgroundShape
-                .stroke(.quaternary)
+                .inset(by: 0.5)
+                .stroke(
+                    LinearGradient(
+                        colors: [.white.opacity(0.2), .white.opacity(0.05)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
         }
     }
 

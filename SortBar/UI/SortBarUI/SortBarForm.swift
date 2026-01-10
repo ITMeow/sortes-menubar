@@ -77,7 +77,7 @@ private struct SortBarFormToggleStyle: ToggleStyle {
             }
             .labelsHidden()
             .toggleStyle(.switch)
-            .controlSize(.mini)
+            .controlSize(.regular)
         } label: {
             configuration.label
         }

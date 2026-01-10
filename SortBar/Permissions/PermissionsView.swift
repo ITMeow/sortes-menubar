@@ -26,171 +26,115 @@ struct PermissionsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 30) {
             headerView
-                .padding(.vertical)
-
-            explanationView
-            permissionsGroupStack
+            
+            VStack(spacing: 20) {
+                Text("To function correctly, SortBar needs access to accessibility features and screen recording.")
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                
+                permissionsGroupStack
+            }
 
             footerView
-                .padding(.vertical)
         }
-        .padding(.horizontal)
-        .fixedSize()
+        .padding(40)
+        .frame(width: 500)
         .readWindow { window in
-            guard let window else {
-                return
-            }
+            guard let window else { return }
             window.styleMask.remove([.closable, .miniaturizable])
-            if let contentView = window.contentView {
-                with(contentView.safeAreaInsets) { insets in
-                    insets.bottom = -insets.bottom
-                    insets.left = -insets.left
-                    insets.right = -insets.right
-                    insets.top = -insets.top
-                    contentView.additionalSafeAreaInsets = insets
-                }
-            }
+            window.titlebarAppearsTransparent = true
+            window.isMovableByWindowBackground = true
         }
     }
 
     @ViewBuilder
     private var headerView: some View {
-        Label {
-            Text("Permissions")
-                .font(.system(size: 36))
-        } icon: {
+        VStack(spacing: 16) {
             if let nsImage = NSImage(named: NSImage.applicationIconName) {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 75, height: 75)
+                    .frame(width: 90, height: 90)
+                    .shadow(color: .black.opacity(0.1), radius: 10, y: 5)
             }
+            Text("Welcome to SortBar")
+                .font(.system(size: 28, weight: .bold))
         }
-    }
-
-    @ViewBuilder
-    private var explanationView: some View {
-        SortBarSection {
-            VStack {
-                Text("Ice needs permission to manage the menu bar.")
-                Text("Absolutely no personal information is collected or stored.")
-                    .bold()
-                    .foregroundStyle(.red)
-            }
-            .padding()
-        }
-        .font(.title3)
-        .padding(.bottom, 10)
     }
 
     @ViewBuilder
     private var permissionsGroupStack: some View {
-        VStack(spacing: 7.5) {
+        VStack(spacing: 16) {
             ForEach(permissionsManager.allPermissions) { permission in
-                permissionBox(permission)
+                permissionRow(permission)
             }
         }
     }
 
     @ViewBuilder
     private var footerView: some View {
-        HStack {
-            quitButton
-            continueButton
-        }
-        .controlSize(.large)
-    }
-
-    @ViewBuilder
-    private var quitButton: some View {
-        Button {
-            NSApp.terminate(nil)
-        } label: {
-            Text("Quit")
-                .frame(maxWidth: .infinity)
-        }
-    }
-
-    @ViewBuilder
-    private var continueButton: some View {
-        Button {
-            guard let appState = permissionsManager.appState else {
-                return
+        HStack(spacing: 16) {
+            Button("Quit") {
+                NSApp.terminate(nil)
             }
-            appState.performSetup()
-            appState.permissionsWindow?.close()
-            appState.appDelegate?.openSettingsWindow()
-        } label: {
-            Text(continueButtonText)
-                .frame(maxWidth: .infinity)
-                .foregroundStyle(continueButtonForegroundStyle)
+            .keyboardShortcut("q")
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Button {
+                guard let appState = permissionsManager.appState else { return }
+                appState.performSetup()
+                appState.permissionsWindow?.close()
+                appState.appDelegate?.openSettingsWindow()
+            } label: {
+                Text(continueButtonText)
+                    .frame(width: 200)
+            }
+            .controlSize(.large)
+            .buttonStyle(.borderedProminent)
+            .disabled(permissionsManager.permissionsState == .missingPermissions)
         }
-        .disabled(permissionsManager.permissionsState == .missingPermissions)
+        .padding(.top, 10)
     }
 
     @ViewBuilder
-    private func permissionBox(_ permission: Permission) -> some View {
-        SortBarSection {
-            VStack(spacing: 10) {
+    private func permissionRow(_ permission: Permission) -> some View {
+        HStack(spacing: 16) {
+            Image(systemName: permission.hasPermission ? "checkmark.circle.fill" : "circle")
+                .font(.title2)
+                .foregroundStyle(permission.hasPermission ? .green : .secondary)
+
+            VStack(alignment: .leading, spacing: 4) {
                 Text(permission.title)
-                    .font(.title)
-                    .underline()
+                    .font(.headline)
+                Text(permission.details.first ?? "")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
-                VStack(spacing: 0) {
-                    Text("Ice needs this to:")
-                        .font(.title3)
-                        .bold()
+            Spacer()
 
-                    VStack(alignment: .leading) {
-                        ForEach(permission.details, id: \.self) { detail in
-                            HStack {
-                                Text("•").bold()
-                                Text(detail)
-                            }
-                        }
-                    }
-                }
-
-                Button {
-                    guard let appState = permissionsManager.appState else {
-                        return
-                    }
+            if !permission.hasPermission {
+                Button("Grant") {
                     permission.performRequest()
                     Task {
                         await permission.waitForPermission()
-                        appState.activate(withPolicy: .regular)
-                        openWindow(id: Constants.permissionsWindowID)
-                    }
-                } label: {
-                    if permission.hasPermission {
-                        Text("Permission Granted")
-                            .foregroundStyle(.green)
-                    } else {
-                        Text("Grant Permission")
+                        permissionsManager.appState?.activate(withPolicy: .regular)
                     }
                 }
-                .allowsHitTesting(!permission.hasPermission)
-
-                if !permission.isRequired {
-                    SortBarGroupBox {
-                        AnnotationView(
-                            alignment: .center,
-                            font: .callout.bold()
-                        ) {
-                            Label {
-                                Text("Ice can work in a limited mode without this permission.")
-                            } icon: {
-                                Image(systemName: "checkmark.shield")
-                                    .foregroundStyle(.green)
-                            }
-                        }
-                    }
-                }
+                .buttonStyle(.bordered)
             }
-            .padding(10)
-            .frame(maxWidth: .infinity)
+        }
+        .padding()
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
         }
     }
 }
