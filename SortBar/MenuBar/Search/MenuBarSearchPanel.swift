@@ -305,7 +305,7 @@ private struct MenuBarSearchContentView: View {
         closePanel()
         Task {
             try await Task.sleep(for: .milliseconds(25))
-            itemManager.tempShowItem(item, clickWhenFinished: true, mouseButton: .left)
+            itemManager.tempShowItem(item, clickWhenFinished: false, mouseButton: .left)
         }
     }
 }

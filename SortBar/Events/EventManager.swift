@@ -186,6 +186,14 @@ extension EventManager {
             return
         }
 
+        // If any pop-up menu is visible, do not rehide.
+        let popUpMenuLevel = CGWindowLevelForKey(.popUpMenuWindow)
+        if WindowInfo.getOnScreenWindows(excludeDesktopWindows: false)
+            .contains(where: { $0.layer == popUpMenuLevel && $0.isOnScreen && $0.alpha > 0.01 })
+        {
+            return
+        }
+
         if let visibleSection = appState.menuBarManager.section(withName: .visible) {
             guard event.window !== visibleSection.controlItem.window else {
                 return
@@ -229,6 +237,11 @@ extension EventManager {
                     .first(where: { $0.frame.contains(mouseLocation) && $0.title?.isEmpty == false }),
                 let owningApplication = windowUnderMouse.owningApplication
             else {
+                return
+            }
+
+            // Don't rehide if the click is inside a window owned by a temporarily shown item.
+            if appState.itemManager.hasTempShownItem(ownerPID: owningApplication.processIdentifier) {
                 return
             }
 

@@ -89,18 +89,23 @@ enum ScreenCapture {
 
         // As a fallback, try to capture a small screenshot of the menu bar area
         // This tests actual capture capability
-        let menuBarRect = CGRect(x: 0, y: 0, width: 100, height: 25)
-        if let image = CGWindowListCreateImage(
-            menuBarRect,
-            .optionOnScreenOnly,
-            kCGNullWindowID,
-            [.boundsIgnoreFraming]
-        ) {
-            // Check if the image has actual content (not just a blank/black image)
-            // A valid capture should have non-zero dimensions
-            if image.width > 0 && image.height > 0 {
-                Logger.screenCapture.debug("Legacy check: Successfully captured menu bar image, permission granted")
-                return true
+        if #available(macOS 14.0, *) {
+            // On macOS 14+, avoid deprecated CGWindowListCreateImage.
+            // Rely on title checks + preflight as fallback.
+        } else {
+            let menuBarRect = CGRect(x: 0, y: 0, width: 100, height: 25)
+            if let image = CGWindowListCreateImage(
+                menuBarRect,
+                .optionOnScreenOnly,
+                kCGNullWindowID,
+                [.boundsIgnoreFraming]
+            ) {
+                // Check if the image has actual content (not just a blank/black image)
+                // A valid capture should have non-zero dimensions
+                if image.width > 0 && image.height > 0 {
+                    Logger.screenCapture.debug("Legacy check: Successfully captured menu bar image, permission granted")
+                    return true
+                }
             }
         }
 

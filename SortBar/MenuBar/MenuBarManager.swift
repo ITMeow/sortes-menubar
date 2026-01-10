@@ -136,6 +136,7 @@ final class MenuBarManager: ObservableObject {
                     Task {
                         try await Task.sleep(for: .seconds(0.1))
                         hiddenSection.hide()
+                        await appState.itemManager.forceRehideTempShownItems()
                     }
                 }
             }

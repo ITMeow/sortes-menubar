@@ -384,7 +384,7 @@ private struct IceBarItemView: View {
             closePanel()
             Task {
                 try await Task.sleep(for: .milliseconds(25))
-                itemManager.tempShowItem(item, clickWhenFinished: true, mouseButton: .left, rehideInterval: 0.5)
+                itemManager.tempShowItem(item, clickWhenFinished: false, mouseButton: .left)
             }
         }
     }
@@ -397,7 +397,7 @@ private struct IceBarItemView: View {
             closePanel()
             Task {
                 try await Task.sleep(for: .milliseconds(25))
-                itemManager.tempShowItem(item, clickWhenFinished: true, mouseButton: .right, rehideInterval: 0.5)
+                itemManager.tempShowItem(item, clickWhenFinished: false, mouseButton: .right)
             }
         }
     }

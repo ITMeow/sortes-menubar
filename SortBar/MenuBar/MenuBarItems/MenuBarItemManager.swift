@@ -72,6 +72,12 @@ final class MenuBarItemManager: ObservableObject {
         /// The information associated with the item.
         let info: MenuBarItemInfo
 
+        /// The window ID of the item itself.
+        let itemWindowID: CGWindowID
+
+        /// The process identifier of the application's item.
+        let ownerPID: pid_t
+
         /// The destination to return the item to.
         let returnDestination: MoveDestination
 
@@ -124,6 +130,31 @@ final class MenuBarItemManager: ObservableObject {
 
     /// A Boolean value that indicates whether a mouse button is down.
     private var isMouseButtonDown = false
+
+    /// A Boolean value that indicates whether a forced rehide sweep is in progress.
+    private var isForceRehideInProgress = false
+
+    /// Returns a Boolean value that indicates whether the current OS is macOS 26 or newer.
+    private var isMacOS26OrNewer: Bool {
+        ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
+    }
+
+    /// The timeout to use when waiting for event taps to receive events.
+    private var eventTapTimeout: Duration {
+        isMacOS26OrNewer ? .milliseconds(150) : .milliseconds(50)
+    }
+
+    /// The minimum delay between successive menu bar item moves.
+    private var moveThrottleDelay: Duration {
+        isMacOS26OrNewer ? .milliseconds(120) : .milliseconds(50)
+    }
+
+    /// A simple backoff delay for retrying move operations.
+    private func retryBackoffDelay(forAttempt attempt: Int) -> Duration {
+        let base = isMacOS26OrNewer ? 120 : 60
+        let clampedAttempt = max(1, min(attempt, 5))
+        return .milliseconds(base * clampedAttempt)
+    }
 
     /// Event type mask for tracking mouse events.
     private let mouseTrackingMask: NSEvent.EventTypeMask = [
@@ -255,7 +286,9 @@ extension MenuBarItemManager {
         var tempShownItems = [(MenuBarItem, MoveDestination)]()
 
         for item in otherItems {
-            if let context = tempShownItemContexts.first(where: { $0.info == item.info }) {
+            if let context = tempShownItemContexts.first(where: { $0.itemWindowID == item.windowID }) ??
+                             tempShownItemContexts.first(where: { $0.info == item.info })
+            {
                 // Keep track of temporarily shown items and their return destinations separately.
                 // We want to cache them as if they were in their original locations. Once all other
                 // items are cached, use the return destinations to insert the items into the cache
@@ -356,6 +389,7 @@ extension MenuBarItemManager {
             }
         }
 
+        /*
         if iceItemsFound == 0 {
             Logger.itemManager.warning("No Ice items found in menu bar! Listing first 10 items...")
             for item in items.prefix(10) {
@@ -363,6 +397,7 @@ extension MenuBarItemManager {
                 Logger.itemManager.debug("Item: namespace='\(item.info.namespace.rawValue)', title='\(item.info.title)', bundleID='\(itemBundleID)'")
             }
         }
+        */
 
         Logger.itemManager.debug("Looking for hiddenControlItem: namespace='\(MenuBarItemInfo.hiddenControlItem.namespace.rawValue)', title='\(MenuBarItemInfo.hiddenControlItem.title)'")
 
@@ -775,7 +810,7 @@ extension MenuBarItemManager {
                 return nil
             }
 
-            eventTap.enable(timeout: .milliseconds(50)) {
+            eventTap.enable(timeout: eventTapTimeout) {
                 Logger.itemManager.error("Event tap \"\(eventTap.label)\" timed out (item: \(item.logString))")
                 eventTap.disable()
                 continuation.resume(throwing: EventError(code: .eventOperationTimeout, item: item))
@@ -881,7 +916,7 @@ extension MenuBarItemManager {
 
             // Enable both taps, with a timeout on the second tap.
             eventTap1.enable()
-            eventTap2.enable(timeout: .milliseconds(50)) {
+            eventTap2.enable(timeout: eventTapTimeout) {
                 Logger.itemManager.error("Event tap \"\(eventTap2.label)\" timed out (item: \(item.logString))")
                 eventTap1.disable()
                 eventTap2.disable()
@@ -911,11 +946,11 @@ extension MenuBarItemManager {
             try await scrombleEvent(event, from: firstLocation, to: secondLocation, item: item)
             Logger.itemManager.warning("Couldn't get menu bar item frame for \(item.logString), so using fixed delay")
             // This will be slow, but subsequent events will have a better chance of succeeding.
-            try await Task.sleep(for: .milliseconds(50))
+            try await Task.sleep(for: moveThrottleDelay)
             return
         }
         try await scrombleEvent(event, from: firstLocation, to: secondLocation, item: item)
-        try await waitForFrameChange(of: item, initialFrame: currentFrame, timeout: .milliseconds(50))
+        try await waitForFrameChange(of: item, initialFrame: currentFrame, timeout: .milliseconds(200))
     }
 
     /// Waits for a menu bar item's frame to change from an initial frame.
@@ -944,7 +979,7 @@ extension MenuBarItemManager {
         } catch is FrameCheckCancellationError {
             Logger.itemManager.warning("Menu bar item frame check for \(item.logString) was cancelled, so using fixed delay")
             // This will be slow, but subsequent events will have a better chance of succeeding.
-            try await Task.sleep(for: .milliseconds(50))
+            try await Task.sleep(for: moveThrottleDelay)
         } catch is TaskTimeoutError {
             throw EventError(code: .frameCheckTimeout, item: item)
         }
@@ -1157,12 +1192,18 @@ extension MenuBarItemManager {
                 if newFrame != initialFrame {
                     Logger.itemManager.info("Successfully moved \(item.logString)")
                     break
+                } else if let screen = NSScreen.main, newFrame.minX < screen.frame.minX || newFrame.maxX > screen.frame.maxX {
+                    Logger.itemManager.info("Item \(item.logString) frame didn't change but is off-screen, considering move successful")
+                    break
                 } else {
                     throw EventError(code: .couldNotComplete, item: item)
                 }
             } catch where n < 5 {
                 Logger.itemManager.warning("Attempt \(n) to move \(item.logString) failed (error: \(error))")
                 try await wakeUpItem(item)
+                let backoffDelay = retryBackoffDelay(forAttempt: n)
+                Logger.itemManager.debug("Backing off for \(backoffDelay) before retrying \(item.logString)")
+                try? await Task.sleep(for: backoffDelay)
                 Logger.itemManager.info("Retrying move of \(item.logString)")
                 continue
             }
@@ -1346,9 +1387,13 @@ extension MenuBarItemManager {
     ///   - rehideInterval: The interval after which to rehide the item. If `nil`, uses the
     ///     user's configured interval from settings.
     func tempShowItem(_ item: MenuBarItem, clickWhenFinished: Bool, mouseButton: CGMouseButton, rehideInterval: TimeInterval? = nil) {
+        // Only return early if the item is already in the visible section.
+        // If it's in a hidden section, we need to move it to the visible
+        // section before we can click it.
         if
             let latest = MenuBarItem(windowID: item.windowID),
-            latest.isOnScreen
+            latest.isOnScreen,
+            itemCache.section(for: item) == .visible
         {
             if clickWhenFinished {
                 Task {
@@ -1439,12 +1484,209 @@ extension MenuBarItemManager {
 
             let context = TempShownItemContext(
                 info: item.info,
+                itemWindowID: item.windowID,
+                ownerPID: item.ownerPID,
                 returnDestination: destination,
                 shownInterfaceWindow: shownInterfaceWindow
             )
             tempShownItemContexts.append(context)
             let interval = rehideInterval ?? appState.settingsManager.advancedSettingsManager.tempShowInterval
             runTempShownItemTimer(for: interval)
+        }
+    }
+
+    /// Forces all temporarily shown items to rehide immediately.
+    ///
+    /// This method ignores checks for mouse button state and interface visibility,
+    /// ensuring that items are returned to their original locations when the
+    /// menu bar is hidden by the system or other triggers.
+    ///
+    /// It effectively performs a "Sweep" of the hidden section, moving any
+    /// items that should be hidden (but are currently visible) back to the
+    /// hidden area.
+    func forceRehideTempShownItems() async {
+        guard !isForceRehideInProgress else {
+            Logger.itemManager.debug("Force rehide already in progress, skipping")
+            return
+        }
+        isForceRehideInProgress = true
+        defer {
+            isForceRehideInProgress = false
+        }
+
+        Logger.itemManager.info("Forcing rehide of all hidden section items (Sweep All)")
+
+        // Cancel the timer to prevent it from firing later.
+        tempShownItemsTimer?.invalidate()
+        tempShownItemsTimer = nil
+
+        // We need ALL items to find the hiddenControlItem, even if it's off-screen.
+        let allItems = MenuBarItem.getMenuBarItems(onScreenOnly: false, activeSpaceOnly: true)
+        
+        // --- DEBUG LOGGING START ---
+        Logger.itemManager.info("Sweep: Found \(allItems.count) items (on-screen + off-screen).")
+        for (index, item) in allItems.enumerated() {
+            if item.isOnScreen || item.info.title == "HItem" { // Log on-screen items + HItem
+                Logger.itemManager.info("  [\(index)] Title: '\(item.info.title)' | Namespace: '\(item.info.namespace.rawValue)' | Frame: \(item.frame)")
+            }
+        }
+        // --- DEBUG LOGGING END ---
+        
+        // Find the Hidden Control Item (HItem) which acts as the divider
+        // First try to find it by strict info match (Namespace + Title).
+        // If that fails (e.g. system reports it as com.apple.controlcenter), try by Title only.
+        guard let hiddenControlItem = allItems.first(where: { $0.info == .hiddenControlItem }) ??
+                                      allItems.first(where: { $0.title == MenuBarItemInfo.hiddenControlItem.title })
+        else {
+            Logger.itemManager.warning("Hidden Control Item not found in ANY items, cannot perform sweep.")
+            return
+        }
+
+        // Get all items that *should* be hidden according to our cache
+        let expectedHiddenItems = itemCache[.hidden]
+
+        func resolveLiveItem(
+            info: MenuBarItemInfo,
+            ownerPID: pid_t?,
+            windowID: CGWindowID?,
+            expectedFrame: CGRect?
+        ) -> MenuBarItem? {
+            if let windowID, let byWindow = allItems.first(where: { $0.windowID == windowID }) {
+                return byWindow
+            }
+            if let byInfo = allItems.first(where: { $0.info == info }) {
+                return byInfo
+            }
+
+            let matches = allItems.filter { $0.info.matchesIgnoringIndex(info) }
+            if matches.count == 1 {
+                return matches[0]
+            }
+            if matches.count > 1 {
+                if let ownerPID {
+                    let pidMatches = matches.filter { $0.ownerPID == ownerPID }
+                    if pidMatches.count == 1 {
+                        return pidMatches[0]
+                    }
+                    if pidMatches.count > 1, let expectedFrame {
+                        return pidMatches.min(by: { abs($0.frame.minX - expectedFrame.minX) < abs($1.frame.minX - expectedFrame.minX) })
+                    }
+                } else if let expectedFrame {
+                    return matches.min(by: { abs($0.frame.minX - expectedFrame.minX) < abs($1.frame.minX - expectedFrame.minX) })
+                }
+                // Ambiguous; avoid moving the wrong item.
+                return nil
+            }
+
+            if let windowID, let fallback = MenuBarItem(windowID: windowID) {
+                return fallback
+            }
+            return nil
+        }
+
+        var itemsToHide = [MenuBarItem]()
+        var seenWindowIDs = Set<CGWindowID>()
+
+        func appendIfUnique(_ item: MenuBarItem) {
+            guard !seenWindowIDs.contains(item.windowID) else {
+                return
+            }
+            seenWindowIDs.insert(item.windowID)
+            itemsToHide.append(item)
+        }
+
+        for item in expectedHiddenItems {
+            if let liveItem = resolveLiveItem(
+                info: item.info,
+                ownerPID: item.ownerPID,
+                windowID: item.windowID,
+                expectedFrame: item.frame
+            ) {
+                appendIfUnique(liveItem)
+            }
+        }
+
+        for context in tempShownItemContexts {
+            if let liveItem = resolveLiveItem(
+                info: context.info,
+                ownerPID: context.ownerPID,
+                windowID: context.itemWindowID,
+                expectedFrame: nil
+            ) {
+                appendIfUnique(liveItem)
+            }
+        }
+
+        MouseCursor.hide()
+        defer {
+            MouseCursor.show()
+        }
+
+        for liveItem in itemsToHide {
+            // Geometric Check: Is the item physically to the RIGHT of the divider?
+            // This is the definitive test for "Visible" in SortBar's logic.
+            // We ignore `isOnScreen` because it can be flaky for off-screen coordinates.
+            if liveItem.frame.minX > hiddenControlItem.frame.minX {
+                Logger.itemManager.info("Sweep: Found leaked item \(liveItem.logString) at \(liveItem.frame). Moving to hidden.")
+
+                do {
+                    // Move it to the Left of HItem (Hidden Zone)
+                    try await move(item: liveItem, to: .leftOfItem(hiddenControlItem))
+                    try? await Task.sleep(for: moveThrottleDelay)
+                } catch {
+                    // Using our robust `move` which checks for off-screen success
+                    Logger.itemManager.error("Sweep: Failed to hide \(liveItem.logString) (error: \(error))")
+                }
+            }
+        }
+
+        let refreshedItems = MenuBarItem.getMenuBarItems(onScreenOnly: false, activeSpaceOnly: true)
+        guard let refreshedHiddenControlItem = refreshedItems.first(where: { $0.info == .hiddenControlItem }) ??
+                                               refreshedItems.first(where: { $0.title == MenuBarItemInfo.hiddenControlItem.title })
+        else {
+            Logger.itemManager.warning("Hidden Control Item not found after sweep, cannot finalize rehide.")
+            return
+        }
+
+        // Cleanup contexts: Only remove contexts for items that are successfully hidden.
+        // "Hidden" means effectively to the LEFT of the hidden control item.
+        tempShownItemContexts.removeAll { context in
+            func resolveRefreshedItem() -> MenuBarItem? {
+                if let byWindow = refreshedItems.first(where: { $0.windowID == context.itemWindowID }) {
+                    return byWindow
+                }
+                if let byInfo = refreshedItems.first(where: { $0.info == context.info }) {
+                    return byInfo
+                }
+                let matches = refreshedItems.filter { $0.info.matchesIgnoringIndex(context.info) }
+                if matches.count == 1 {
+                    return matches[0]
+                }
+                if matches.count > 1 {
+                    let pidMatches = matches.filter { $0.ownerPID == context.ownerPID }
+                    if pidMatches.count == 1 {
+                        return pidMatches[0]
+                    }
+                    // Ambiguous; keep context to retry.
+                    return nil
+                }
+                return nil
+            }
+
+            guard let item = resolveRefreshedItem() else {
+                // If item is gone from the list entirely, assume it's handled/gone.
+                return true
+            }
+
+            // If item is to the LEFT of the divider (HItem), it is hidden.
+            // If item is to the RIGHT, it is visible. Keep context to retry.
+            return item.frame.minX <= refreshedHiddenControlItem.frame.minX
+        }
+
+        // If items are still tracked (meaning they are stuck on screen), retry shortly.
+        if !tempShownItemContexts.isEmpty {
+            Logger.itemManager.warning("Sweep incomplete. Some items remain visible. Retrying in 2 seconds.")
+            runTempShownItemTimer(for: 2.0)
         }
     }
 
@@ -1458,6 +1700,7 @@ extension MenuBarItemManager {
             itemMoveCount -= 1
         }
 
+        // Even though we are sweeping, we check if we *started* a lease to know if we should even try.
         guard !tempShownItemContexts.isEmpty else {
             return
         }
@@ -1473,38 +1716,61 @@ extension MenuBarItemManager {
             return
         }
 
-        Logger.itemManager.info("Rehiding temporarily shown items")
+        let tempItemPIDs = Set(tempShownItemContexts.map(\.ownerPID))
+        if !tempItemPIDs.isEmpty {
+            if let mouseLocation = MouseCursor.locationCoreGraphics {
+                let tempItemWindows = WindowInfo.getOnScreenWindows(excludeDesktopWindows: false)
+                    .filter { tempItemPIDs.contains($0.ownerPID) && !$0.isMenuBarItem }
+                if tempItemWindows.contains(where: { $0.frame.contains(mouseLocation) }) {
+                    Logger.itemManager.debug("Mouse is inside a temp item window, so waiting to rehide")
+                    runTempShownItemTimer(for: 3)
+                    return
+                }
 
-        var failedContexts = [TempShownItemContext]()
-
-        let items = MenuBarItem.getMenuBarItems(onScreenOnly: false, activeSpaceOnly: true)
-
-        MouseCursor.hide()
-
-        defer {
-            MouseCursor.show()
-        }
-
-        while let context = tempShownItemContexts.popLast() {
-            guard let item = items.first(where: { $0.info == context.info }) else {
-                continue
+                if let screen = NSScreen.main, let menuBarHeight = screen.getMenuBarHeight() {
+                    let displayBounds = CGDisplayBounds(screen.displayID)
+                    let menuBarBottomY = displayBounds.minY + menuBarHeight
+                    let popoverThreshold: CGFloat = 6
+                    let popoverWindows = WindowInfo.getOnScreenWindows(excludeDesktopWindows: false)
+                        .filter { $0.isOnScreen && !$0.isMenuBarItem && $0.alpha > 0.01 }
+                        .filter { window in
+                            window.frame.minY <= menuBarBottomY + popoverThreshold &&
+                            window.frame.minY >= displayBounds.minY - 1 &&
+                            window.frame.height > menuBarHeight * 1.2
+                        }
+                    if popoverWindows.contains(where: { $0.frame.contains(mouseLocation) }) {
+                        Logger.itemManager.debug("Mouse is inside a menu bar popover window, so waiting to rehide")
+                        runTempShownItemTimer(for: 3)
+                        return
+                    }
+                }
             }
-            do {
-                try await move(item: item, to: context.returnDestination)
-            } catch {
-                Logger.itemManager.error("Failed to rehide \(item.logString) (error: \(error))")
-                failedContexts.append(context)
+
+            if let frontmostApp = NSWorkspace.shared.frontmostApplication,
+               tempItemPIDs.contains(frontmostApp.processIdentifier) {
+                let frontmostWindows = WindowInfo.getOnScreenWindows(excludeDesktopWindows: false)
+                    .filter {
+                        $0.ownerPID == frontmostApp.processIdentifier &&
+                        !$0.isMenuBarItem &&
+                        $0.isOnScreen &&
+                        $0.alpha > 0.01
+                    }
+                if !frontmostWindows.isEmpty {
+                    Logger.itemManager.debug("Frontmost app owns temp item window, so waiting to rehide")
+                    runTempShownItemTimer(for: 3)
+                    return
+                }
             }
         }
 
-        if failedContexts.isEmpty {
-            tempShownItemsTimer?.invalidate()
-            tempShownItemsTimer = nil
-        } else {
-            tempShownItemContexts = failedContexts
-            Logger.itemManager.warning("Some items failed to rehide")
-            runTempShownItemTimer(for: 3)
+        // Use the robust "Sweep" logic to clean up everything
+        if isForceRehideInProgress {
+            Logger.itemManager.debug("Rehide already in progress, deferring")
+            runTempShownItemTimer(for: 1)
+            return
         }
+
+        await forceRehideTempShownItems()
     }
 
     /// Removes a temporarily shown item from the cache.
@@ -1512,6 +1778,12 @@ extension MenuBarItemManager {
     /// This ensures that the item will _not_ be returned to its previous location.
     func removeTempShownItemFromCache(with info: MenuBarItemInfo) {
         tempShownItemContexts.removeAll { $0.info == info }
+    }
+
+    /// Returns a Boolean value that indicates whether a temporarily shown item
+    /// belongs to the given process identifier.
+    func hasTempShownItem(ownerPID: pid_t) -> Bool {
+        tempShownItemContexts.contains { $0.ownerPID == ownerPID }
     }
 }
 

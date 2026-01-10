@@ -20,6 +20,15 @@ final class MenuBarItemImageCache: ObservableObject {
     /// The shared app state.
     private weak var appState: AppState?
 
+    /// The number of consecutive image capture failures.
+    private var consecutiveCaptureFailures = 0
+
+    /// A timestamp to suppress capture attempts until.
+    private var suppressCaptureUntil: Date?
+
+    /// A timestamp to disable composite capture until.
+    private var compositeCaptureDisabledUntil: Date?
+
     /// Storage for internal observers.
     private var cancellables = Set<AnyCancellable>()
 
@@ -79,6 +88,26 @@ final class MenuBarItemImageCache: ObservableObject {
         Logger.imageCache.debug("Skipping menu bar item image cache as \(reason)")
     }
 
+    /// Returns a Boolean value that indicates whether the current OS is macOS 26 or newer.
+    private var isMacOS26OrNewer: Bool {
+        ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
+    }
+
+    /// Records a successful capture attempt and clears backoff state.
+    private func recordCaptureSuccess() {
+        consecutiveCaptureFailures = 0
+        suppressCaptureUntil = nil
+    }
+
+    /// Records a failed capture attempt and applies backoff.
+    private func recordCaptureFailure() {
+        consecutiveCaptureFailures += 1
+        let baseDelay = isMacOS26OrNewer ? 2.0 : 1.0
+        let delay = min(pow(2.0, Double(consecutiveCaptureFailures - 1)) * baseDelay, 30.0)
+        suppressCaptureUntil = Date.now.addingTimeInterval(delay)
+        Logger.imageCache.warning("Image capture failed. Backing off for \(delay)s (attempt \(consecutiveCaptureFailures)).")
+    }
+
     /// Returns a Boolean value that indicates whether caching menu bar items failed for
     /// the given section.
     @MainActor
@@ -110,6 +139,7 @@ final class MenuBarItemImageCache: ObservableObject {
         let backingScaleFactor = screen.backingScaleFactor
         let displayBounds = CGDisplayBounds(screen.displayID)
         let option: CGWindowImageOption = [.boundsIgnoreFraming, .bestResolution]
+        let compositeOption: CGWindowImageOption = isMacOS26OrNewer ? [.boundsIgnoreFraming, .nominalResolution] : option
 
         var itemInfos = [CGWindowID: MenuBarItemInfo]()
         var itemFrames = [CGWindowID: CGRect]()
@@ -131,8 +161,10 @@ final class MenuBarItemImageCache: ObservableObject {
             frame = frame.union(itemFrame)
         }
 
+        let canUseComposite = windowIDs.count > 1 && (compositeCaptureDisabledUntil.map { Date.now >= $0 } ?? true)
         if
-            let compositeImage = ScreenCapture.captureWindows(windowIDs, option: option),
+            canUseComposite,
+            let compositeImage = ScreenCapture.captureWindows(windowIDs, option: compositeOption),
             CGFloat(compositeImage.width) == frame.width * backingScaleFactor
         {
             for windowID in windowIDs {
@@ -160,6 +192,7 @@ final class MenuBarItemImageCache: ObservableObject {
             }
         } else {
             Logger.imageCache.warning("Composite image capture failed. Attempting to capturing items individually.")
+            compositeCaptureDisabledUntil = Date.now.addingTimeInterval(isMacOS26OrNewer ? 60.0 : 15.0)
 
             for windowID in windowIDs {
                 guard let itemInfo = itemInfos[windowID] else {
@@ -172,6 +205,10 @@ final class MenuBarItemImageCache: ObservableObject {
 
                 // Store image without height normalization
                 images[itemInfo] = itemImage
+
+                if isMacOS26OrNewer {
+                    try? await Task.sleep(for: .milliseconds(30))
+                }
             }
         }
 
@@ -234,18 +271,33 @@ final class MenuBarItemImageCache: ObservableObject {
             return
         }
 
+        if let suppressUntil = suppressCaptureUntil, Date.now < suppressUntil {
+            logSkippingCache(reason: "recent capture failures, backing off")
+            return
+        }
+
         var newImages = [MenuBarItemInfo: CGImage]()
+        var didAttemptCapture = false
 
         for section in sections {
             guard await !appState.itemManager.itemCache[section].isEmpty else {
                 continue
             }
+            didAttemptCapture = true
             let sectionImages = await createImages(for: section, screen: screen)
             guard !sectionImages.isEmpty else {
                 Logger.imageCache.warning("Update image cache failed for \(section.logString)")
                 continue
             }
             newImages.merge(sectionImages) { (_, new) in new }
+        }
+
+        if didAttemptCapture {
+            if newImages.isEmpty {
+                recordCaptureFailure()
+            } else {
+                recordCaptureSuccess()
+            }
         }
 
         await MainActor.run { [newImages] in

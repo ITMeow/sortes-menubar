@@ -264,18 +264,21 @@ final class MenuBarSection {
                         withTimeInterval: appState.settingsManager.generalSettingsManager.rehideInterval,
                         repeats: false
                     ) { [weak self] _ in
-                        guard
-                            let self,
-                            let screen = NSScreen.main
-                        else {
-                            return
-                        }
-                        if NSEvent.mouseLocation.y < screen.visibleFrame.maxY {
-                            Task {
-                                await self.hide()
+                        Task { @MainActor [weak self] in
+                            guard
+                                let self,
+                                let screen = NSScreen.main
+                            else {
+                                return
                             }
-                        } else {
-                            Task {
+
+                            let mouseBelowMenuBar = NSEvent.mouseLocation.y < screen.visibleFrame.maxY
+                            let isOverIceBar = self.iceBarPanel?.frame.contains(NSEvent.mouseLocation) == true
+
+                            if mouseBelowMenuBar && !isOverIceBar {
+                                await self.hide()
+                                await self.appState?.itemManager.forceRehideTempShownItems()
+                            } else {
                                 await self.startRehideChecks()
                             }
                         }
